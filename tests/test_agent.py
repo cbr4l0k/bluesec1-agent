@@ -1,15 +1,14 @@
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
+
+from bluesec1_agent import agent as agent_module
 from bluesec1_agent.agent import SimpleSGRAgent
-from bluesec1_agent.models import (
-    FinishInvestigationArtifact,
-    FinishInvestigationRequest,
-    GetEntityRequest,
-    NextStep,
-)
+from bluesec1_agent.models import NextStep, ToolCall
 from bluesec1_client import (
     PublicTask,
     RemoteBenchmarkClient,
@@ -17,6 +16,8 @@ from bluesec1_client import (
     TaskResult,
     ToolCallResult,
 )
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class FakeStepClient:
@@ -31,11 +32,14 @@ class FakeStepClient:
         self.steps = list(steps)
         self.requests: list[list[dict[str, Any]]] = []
 
-    async def next_step(self, messages: list[dict[str, Any]]) -> NextStep:
+    async def next_step(
+        self, messages: list[dict[str, Any]], response_format: dict[str, Any]
+    ) -> NextStep:
         """Record one conversation and return its next prepared step.
 
         Args:
             messages: Current LLM history.
+            response_format: Catalog-derived step schema.
 
         Returns:
             Next prepared structured step.
@@ -52,13 +56,9 @@ class FakeSession:
         self.task = PublicTask(
             task_id="task-1",
             observation={
-                "alert_text": {"trigger_entities": []},
-                "available_tools": json.dumps(
-                    [
-                        {"name": "get_entity", "parameters": {"type": "object"}},
-                        {"name": "finish_investigation", "parameters": {"type": "object"}},
-                    ]
-                ),
+                "alert_text": (FIXTURES / "alert.json").read_text(),
+                "available_tools": (FIXTURES / "available_tools.json").read_text(),
+                "last_tool_result": "",
             },
         )
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -99,12 +99,14 @@ class FakeSession:
             tool_name=tool_name,
             reward=1.0,
             terminated=terminal,
-            info={
-                "tool_status": "ok",
-                "tool_result": (
-                    [{"entity_id": "process-1", "pid": 42}] if not terminal else "Report accepted"
+            observation={
+                "last_tool_result": json.dumps(
+                    {"id": "process-1", "type": "windows_process", "properties": {"pid": 42}}
+                    if not terminal
+                    else {"message": "Report accepted"}
                 ),
             },
+            info={"tool_status": "ok"},
             task_result=task_result,
         )
 
@@ -145,34 +147,40 @@ class FakeClient:
         return cast(RemoteBenchmarkSession, session)
 
 
-def test_agent_executes_fresh_structured_task_via_remote_session() -> None:
+def test_agent_executes_fresh_structured_task_via_remote_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Tool evidence should feed the next step before the terminal action."""
+    monkeypatch.setattr(agent_module, "TRACE_DIR", tmp_path)
     llm = FakeStepClient(
         [
             NextStep(
                 current_state="Alert identifies process 42 on host-1.",
                 plan_remaining_steps_brief=["Inspect its process ancestry and descendants."],
                 task_completed=False,
-                function=GetEntityRequest(
-                    tool="get_entity",
-                    entity_id="entity-1",
-                ),
+                functions=[
+                    ToolCall(
+                        tool="get_entity",
+                        entity_id="entity-1",
+                        reasoning="Read the trigger process.",
+                        unused_optional=None,
+                    )
+                ],
             ),
             NextStep(
                 current_state="The suspicious process is confirmed on host-1.",
                 plan_remaining_steps_brief=["Submit the evidence-backed malicious verdict."],
                 task_completed=True,
-                function=FinishInvestigationRequest(
-                    tool="finish_investigation",
-                    verdict="malicious",
-                    ir_artifacts=[
-                        FinishInvestigationArtifact(
-                            entity_id="host-1",
-                            kind="host_to_isolate",
-                        )
-                    ],
-                    reasoning="The alert process is part of a suspicious process chain.",
-                ),
+                functions=[
+                    ToolCall(
+                        tool="finish_investigation",
+                        submission={
+                            "verdict": "malicious",
+                            "ir_artifacts": [{"entity_id": "host-1", "kind": "host_to_isolate"}],
+                            "reasoning": "The alert process is part of a suspicious process chain.",
+                        },
+                    )
+                ],
             ),
         ]
     )
@@ -188,6 +196,11 @@ def test_agent_executes_fresh_structured_task_via_remote_session() -> None:
         "get_entity",
         "finish_investigation",
     ]
+    assert session.calls[0][1] == {
+        "entity_id": "entity-1",
+        "reasoning": "Read the trigger process.",
+    }
+    assert "submission" in session.calls[1][1]
     assert any(
         message.get("role") == "tool" and "process-1" in str(message.get("content"))
         for message in llm.requests[1]

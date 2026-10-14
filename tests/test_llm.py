@@ -1,4 +1,6 @@
 import asyncio
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -9,11 +11,10 @@ from bluesec1_agent.llm import (
     OpenAIStructuredStepClient,
     parse_next_step_payload,
 )
-from bluesec1_agent.models import (
-    NEXT_STEP_RESPONSE_FORMAT,
-    GetEntityRequest,
-    NextStep,
-)
+from bluesec1_agent.models import NextStep, ToolCall, build_step_response_format
+
+CATALOG = json.loads((Path(__file__).parent / "fixtures" / "available_tools.json").read_text())
+RESPONSE_FORMAT = build_step_response_format(CATALOG)
 
 
 class FakeCompletions:
@@ -55,10 +56,7 @@ def valid_process_step() -> NextStep:
         current_state="The trigger entity needs its relations.",
         plan_remaining_steps_brief=["Read the trigger entity."],
         task_completed=False,
-        function=GetEntityRequest(
-            tool="get_entity",
-            entity_id="entity-1",
-        ),
+        functions=[ToolCall(tool="get_entity", entity_id="entity-1", reasoning="Read it.")],
     )
 
 
@@ -76,9 +74,9 @@ def test_structured_client_repairs_malformed_response() -> None:
     )
     original_messages = [{"role": "system", "content": "Investigate."}]
 
-    step = asyncio.run(client.next_step(original_messages))
+    step = asyncio.run(client.next_step(original_messages, RESPONSE_FORMAT))
 
-    assert step.function.tool == "get_entity"
+    assert step.functions[0].tool == "get_entity"
     assert len(fake_openai.completions.requests) == 2
     first_messages = fake_openai.completions.requests[0]["messages"]
     assert "Never use top-level `action`" in first_messages[0]["content"]
@@ -96,11 +94,52 @@ def test_parser_rejects_inconsistent_completion_flag() -> None:
         parse_next_step_payload(payload)
 
 
-def test_response_schema_requires_nullable_tool_fields() -> None:
-    """Strict provider schema should require optional fields as nullable values."""
-    schema = NEXT_STEP_RESPONSE_FORMAT["json_schema"]["schema"]
-    process_schema = schema["$defs"]["GetEntityRequest"]
+def _walk(node: Any) -> list[dict[str, Any]]:
+    """Return every object node in a JSON Schema."""
+    if isinstance(node, list):
+        return [found for child in node for found in _walk(child)]
+    if not isinstance(node, dict):
+        return []
+    return [node, *(found for child in node.values() for found in _walk(child))]
 
-    assert set(process_schema["required"]) == set(process_schema["properties"])
-    assert "default" not in str(schema)
-    assert "discriminator" not in str(schema)
+
+def test_response_schema_from_live_catalog_is_strict() -> None:
+    """The real runtime catalog should become a strict schema with nullable optionals."""
+    schema = RESPONSE_FORMAT["json_schema"]["schema"]
+    variants = schema["properties"]["functions"]["items"]["anyOf"]
+
+    assert {variant["properties"]["tool"]["enum"][0] for variant in variants} == {
+        tool["name"] for tool in CATALOG
+    }
+    for node in _walk(schema):
+        if isinstance(node.get("properties"), dict):
+            assert set(node["required"]) == set(node["properties"])
+            assert node["additionalProperties"] is False
+        if "$ref" in node:
+            assert list(node) == ["$ref"]
+    for keyword in ("default", "discriminator", "oneOf", "const"):
+        assert f'"{keyword}"' not in json.dumps(schema)
+    search = next(v for v in variants if v["properties"]["tool"]["enum"] == ["search"])
+    assert {"type": "null"} in search["properties"]["page_id"]["anyOf"]
+    assert "reasoning" in search["required"]
+
+
+def test_tool_call_arguments_drop_null_placeholders() -> None:
+    """Nullable placeholders for omitted optional fields must not reach the runtime."""
+    call = ToolCall(tool="search", query="svchost", reasoning="r", page_id=None, scope=None)
+
+    assert call.arguments == {"query": "svchost", "reasoning": "r"}
+
+
+def test_parser_rejects_finish_batched_with_other_calls() -> None:
+    """finish_investigation must be the only call in its step."""
+    step = valid_process_step()
+    payload = step.model_copy(
+        update={
+            "task_completed": True,
+            "functions": [*step.functions, ToolCall(tool="finish_investigation", submission={})],
+        }
+    ).model_dump_json()
+
+    with pytest.raises(ValueError, match="only call"):
+        parse_next_step_payload(payload)

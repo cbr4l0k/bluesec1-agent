@@ -1,0 +1,1260 @@
+[
+ {
+  "name": "finish_investigation",
+  "description": "Finish the investigation and submit the final response.",
+  "tags": [
+   "built_in"
+  ],
+  "arg_model": "FinishInvestigationArgs",
+  "parameters": {
+   "$defs": {
+    "BenignFinishInvestigationSubmission": {
+     "additionalProperties": false,
+     "description": "Final investigation submission for a benign verdict.",
+     "properties": {
+      "verdict": {
+       "const": "benign",
+       "description": "Final benign verdict.",
+       "title": "Verdict",
+       "type": "string"
+      },
+      "legitimacy_evidence": {
+       "description": "Graph objects and properties supporting the benign verdict.",
+       "items": {
+        "discriminator": {
+         "mapping": {
+          "entity": "#/$defs/FinishInvestigationEntityEvidence",
+          "relation": "#/$defs/FinishInvestigationRelationEvidence"
+         },
+         "propertyName": "anchor"
+        },
+        "oneOf": [
+         {
+          "$ref": "#/$defs/FinishInvestigationEntityEvidence"
+         },
+         {
+          "$ref": "#/$defs/FinishInvestigationRelationEvidence"
+         }
+        ]
+       },
+       "title": "Legitimacy Evidence",
+       "type": "array"
+      },
+      "reasoning": {
+       "description": "Concise explanation of the final verdict.",
+       "title": "Reasoning",
+       "type": "string"
+      }
+     },
+     "required": [
+      "verdict",
+      "legitimacy_evidence",
+      "reasoning"
+     ],
+     "title": "BenignFinishInvestigationSubmission",
+     "type": "object"
+    },
+    "FinishInvestigationArtifact": {
+     "additionalProperties": false,
+     "description": "One IR artifact submitted for a malicious verdict.",
+     "properties": {
+      "entity_id": {
+       "description": "ID of the entity requiring an IR action.",
+       "title": "Entity Id",
+       "type": "string"
+      },
+      "kind": {
+       "$ref": "#/$defs/IRArtifactKind",
+       "description": "IR action or forensic artifact classification."
+      }
+     },
+     "required": [
+      "entity_id",
+      "kind"
+     ],
+     "title": "FinishInvestigationArtifact",
+     "type": "object"
+    },
+    "FinishInvestigationEntityEvidence": {
+     "additionalProperties": false,
+     "description": "Observable entity properties supporting a benign verdict.",
+     "properties": {
+      "anchor": {
+       "const": "entity",
+       "description": "Entity evidence discriminator.",
+       "title": "Anchor",
+       "type": "string"
+      },
+      "entity_id": {
+       "description": "ID of the cited entity.",
+       "title": "Entity Id",
+       "type": "string"
+      },
+      "property_fields": {
+       "description": "Entity property names supporting legitimacy.",
+       "items": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "minItems": 1,
+       "title": "Property Fields",
+       "type": "array"
+      }
+     },
+     "required": [
+      "anchor",
+      "entity_id",
+      "property_fields"
+     ],
+     "title": "FinishInvestigationEntityEvidence",
+     "type": "object"
+    },
+    "FinishInvestigationRelationEvidence": {
+     "additionalProperties": false,
+     "description": "An observable relation or its properties supporting a benign verdict.",
+     "properties": {
+      "anchor": {
+       "const": "relation",
+       "description": "Relation evidence discriminator.",
+       "title": "Anchor",
+       "type": "string"
+      },
+      "relation_id": {
+       "description": "ID of the cited relation.",
+       "title": "Relation Id",
+       "type": "string"
+      },
+      "property_fields": {
+       "description": "Relation property names supporting legitimacy, if any.",
+       "items": {
+        "minLength": 1,
+        "type": "string"
+       },
+       "title": "Property Fields",
+       "type": "array"
+      }
+     },
+     "required": [
+      "anchor",
+      "relation_id"
+     ],
+     "title": "FinishInvestigationRelationEvidence",
+     "type": "object"
+    },
+    "IRArtifactKind": {
+     "description": "Enumeration of incident response artifact kinds for automated playbook execution.\n\nEach kind represents a distinct category of forensic artifact or remediation\naction that must be performed during incident response. These kinds are used\nto generate IR playbooks from attack scenario emulations, ensuring that all\nattacker artifacts are properly identified, contained, and removed.\n\nKinds split into two groups by tier:\n- RESPOND-tier (action verbs): the original 7 first-class kinds plus\n  OTHER. Pair with `IRTier.RESPOND` rows.\n- FORENSIC-tier (observed-only): the *_OBSERVED kinds + ARTIFACT_OBSERVED\n  escape hatch. Pair with `IRTier.FORENSIC` rows. Validator\n  `INCIDENT_RESPONSE_TIER_KIND_MISMATCH` enforces the pairing.\n\nDeliberately NO connection_observed / load_observed kinds \u2014 telemetry for\nnetwork connections and image-load events lives on the RELATION's\nlog_sources (filled by ontology.log_source_builder), not on entity-level\nIR artifacts. Entity-level forensic rows would double-count what the\nparent endpoint's relations already emit (the coverage audit attributes\nthose events to the endpoint entity).",
+     "enum": [
+      "host_to_isolate",
+      "identity_to_rotate",
+      "persistence_to_remove",
+      "cleanup_to_verify",
+      "file_to_delete",
+      "network_block",
+      "mailbox_action",
+      "other",
+      "process_observed",
+      "registry_observed",
+      "file_observed",
+      "mount_observed",
+      "lnk_observed",
+      "ticket_observed",
+      "identity_observed",
+      "artifact_observed"
+     ],
+     "title": "IRArtifactKind",
+     "type": "string"
+    },
+    "MaliciousFinishInvestigationSubmission": {
+     "additionalProperties": false,
+     "description": "Final investigation submission for a malicious verdict.",
+     "properties": {
+      "verdict": {
+       "const": "malicious",
+       "description": "Final malicious verdict.",
+       "title": "Verdict",
+       "type": "string"
+      },
+      "ir_artifacts": {
+       "description": "Entities requiring response or forensic reporting.",
+       "items": {
+        "$ref": "#/$defs/FinishInvestigationArtifact"
+       },
+       "title": "Ir Artifacts",
+       "type": "array"
+      },
+      "reasoning": {
+       "description": "Concise explanation of the final verdict.",
+       "title": "Reasoning",
+       "type": "string"
+      }
+     },
+     "required": [
+      "verdict",
+      "ir_artifacts",
+      "reasoning"
+     ],
+     "title": "MaliciousFinishInvestigationSubmission",
+     "type": "object"
+    }
+   },
+   "additionalProperties": false,
+   "properties": {
+    "submission": {
+     "description": "Verdict-specific final investigation report.",
+     "discriminator": {
+      "mapping": {
+       "benign": "#/$defs/BenignFinishInvestigationSubmission",
+       "malicious": "#/$defs/MaliciousFinishInvestigationSubmission"
+      },
+      "propertyName": "verdict"
+     },
+     "oneOf": [
+      {
+       "$ref": "#/$defs/MaliciousFinishInvestigationSubmission"
+      },
+      {
+       "$ref": "#/$defs/BenignFinishInvestigationSubmission"
+      }
+     ],
+     "title": "Submission"
+    }
+   },
+   "required": [
+    "submission"
+   ],
+   "type": "object"
+  },
+  "function_schema": {
+   "type": "function",
+   "function": {
+    "name": "finish_investigation",
+    "description": "Finish the investigation and submit the final response.",
+    "parameters": {
+     "$defs": {
+      "BenignFinishInvestigationSubmission": {
+       "additionalProperties": false,
+       "description": "Final investigation submission for a benign verdict.",
+       "properties": {
+        "verdict": {
+         "const": "benign",
+         "description": "Final benign verdict.",
+         "title": "Verdict",
+         "type": "string"
+        },
+        "legitimacy_evidence": {
+         "description": "Graph objects and properties supporting the benign verdict.",
+         "items": {
+          "discriminator": {
+           "mapping": {
+            "entity": "#/$defs/FinishInvestigationEntityEvidence",
+            "relation": "#/$defs/FinishInvestigationRelationEvidence"
+           },
+           "propertyName": "anchor"
+          },
+          "oneOf": [
+           {
+            "$ref": "#/$defs/FinishInvestigationEntityEvidence"
+           },
+           {
+            "$ref": "#/$defs/FinishInvestigationRelationEvidence"
+           }
+          ]
+         },
+         "title": "Legitimacy Evidence",
+         "type": "array"
+        },
+        "reasoning": {
+         "description": "Concise explanation of the final verdict.",
+         "title": "Reasoning",
+         "type": "string"
+        }
+       },
+       "required": [
+        "verdict",
+        "legitimacy_evidence",
+        "reasoning"
+       ],
+       "title": "BenignFinishInvestigationSubmission",
+       "type": "object"
+      },
+      "FinishInvestigationArtifact": {
+       "additionalProperties": false,
+       "description": "One IR artifact submitted for a malicious verdict.",
+       "properties": {
+        "entity_id": {
+         "description": "ID of the entity requiring an IR action.",
+         "title": "Entity Id",
+         "type": "string"
+        },
+        "kind": {
+         "$ref": "#/$defs/IRArtifactKind",
+         "description": "IR action or forensic artifact classification."
+        }
+       },
+       "required": [
+        "entity_id",
+        "kind"
+       ],
+       "title": "FinishInvestigationArtifact",
+       "type": "object"
+      },
+      "FinishInvestigationEntityEvidence": {
+       "additionalProperties": false,
+       "description": "Observable entity properties supporting a benign verdict.",
+       "properties": {
+        "anchor": {
+         "const": "entity",
+         "description": "Entity evidence discriminator.",
+         "title": "Anchor",
+         "type": "string"
+        },
+        "entity_id": {
+         "description": "ID of the cited entity.",
+         "title": "Entity Id",
+         "type": "string"
+        },
+        "property_fields": {
+         "description": "Entity property names supporting legitimacy.",
+         "items": {
+          "minLength": 1,
+          "type": "string"
+         },
+         "minItems": 1,
+         "title": "Property Fields",
+         "type": "array"
+        }
+       },
+       "required": [
+        "anchor",
+        "entity_id",
+        "property_fields"
+       ],
+       "title": "FinishInvestigationEntityEvidence",
+       "type": "object"
+      },
+      "FinishInvestigationRelationEvidence": {
+       "additionalProperties": false,
+       "description": "An observable relation or its properties supporting a benign verdict.",
+       "properties": {
+        "anchor": {
+         "const": "relation",
+         "description": "Relation evidence discriminator.",
+         "title": "Anchor",
+         "type": "string"
+        },
+        "relation_id": {
+         "description": "ID of the cited relation.",
+         "title": "Relation Id",
+         "type": "string"
+        },
+        "property_fields": {
+         "description": "Relation property names supporting legitimacy, if any.",
+         "items": {
+          "minLength": 1,
+          "type": "string"
+         },
+         "title": "Property Fields",
+         "type": "array"
+        }
+       },
+       "required": [
+        "anchor",
+        "relation_id"
+       ],
+       "title": "FinishInvestigationRelationEvidence",
+       "type": "object"
+      },
+      "IRArtifactKind": {
+       "description": "Enumeration of incident response artifact kinds for automated playbook execution.\n\nEach kind represents a distinct category of forensic artifact or remediation\naction that must be performed during incident response. These kinds are used\nto generate IR playbooks from attack scenario emulations, ensuring that all\nattacker artifacts are properly identified, contained, and removed.\n\nKinds split into two groups by tier:\n- RESPOND-tier (action verbs): the original 7 first-class kinds plus\n  OTHER. Pair with `IRTier.RESPOND` rows.\n- FORENSIC-tier (observed-only): the *_OBSERVED kinds + ARTIFACT_OBSERVED\n  escape hatch. Pair with `IRTier.FORENSIC` rows. Validator\n  `INCIDENT_RESPONSE_TIER_KIND_MISMATCH` enforces the pairing.\n\nDeliberately NO connection_observed / load_observed kinds \u2014 telemetry for\nnetwork connections and image-load events lives on the RELATION's\nlog_sources (filled by ontology.log_source_builder), not on entity-level\nIR artifacts. Entity-level forensic rows would double-count what the\nparent endpoint's relations already emit (the coverage audit attributes\nthose events to the endpoint entity).",
+       "enum": [
+        "host_to_isolate",
+        "identity_to_rotate",
+        "persistence_to_remove",
+        "cleanup_to_verify",
+        "file_to_delete",
+        "network_block",
+        "mailbox_action",
+        "other",
+        "process_observed",
+        "registry_observed",
+        "file_observed",
+        "mount_observed",
+        "lnk_observed",
+        "ticket_observed",
+        "identity_observed",
+        "artifact_observed"
+       ],
+       "title": "IRArtifactKind",
+       "type": "string"
+      },
+      "MaliciousFinishInvestigationSubmission": {
+       "additionalProperties": false,
+       "description": "Final investigation submission for a malicious verdict.",
+       "properties": {
+        "verdict": {
+         "const": "malicious",
+         "description": "Final malicious verdict.",
+         "title": "Verdict",
+         "type": "string"
+        },
+        "ir_artifacts": {
+         "description": "Entities requiring response or forensic reporting.",
+         "items": {
+          "$ref": "#/$defs/FinishInvestigationArtifact"
+         },
+         "title": "Ir Artifacts",
+         "type": "array"
+        },
+        "reasoning": {
+         "description": "Concise explanation of the final verdict.",
+         "title": "Reasoning",
+         "type": "string"
+        }
+       },
+       "required": [
+        "verdict",
+        "ir_artifacts",
+        "reasoning"
+       ],
+       "title": "MaliciousFinishInvestigationSubmission",
+       "type": "object"
+      }
+     },
+     "additionalProperties": false,
+     "properties": {
+      "submission": {
+       "description": "Verdict-specific final investigation report.",
+       "discriminator": {
+        "mapping": {
+         "benign": "#/$defs/BenignFinishInvestigationSubmission",
+         "malicious": "#/$defs/MaliciousFinishInvestigationSubmission"
+        },
+        "propertyName": "verdict"
+       },
+       "oneOf": [
+        {
+         "$ref": "#/$defs/MaliciousFinishInvestigationSubmission"
+        },
+        {
+         "$ref": "#/$defs/BenignFinishInvestigationSubmission"
+        }
+       ],
+       "title": "Submission"
+      }
+     },
+     "required": [
+      "submission"
+     ],
+     "type": "object"
+    },
+    "strict": true
+   }
+  }
+ },
+ {
+  "name": "get_ad_object_info",
+  "description": "Get one Active Directory object by ID with resolved navigation references.",
+  "tags": [
+   "built_in"
+  ],
+  "arg_model": "GetAdObjectInfoArgs",
+  "parameters": {
+   "additionalProperties": false,
+   "properties": {
+    "ad_object_id": {
+     "description": "Active Directory object ID obtained from a graph object or another Active Directory lookup.",
+     "title": "Ad Object Id",
+     "type": "string"
+    },
+    "reasoning": {
+     "description": "Explanation of why this tool was called with the provided arguments.",
+     "maxLength": 4096,
+     "minLength": 1,
+     "title": "Reasoning",
+     "type": "string"
+    }
+   },
+   "required": [
+    "ad_object_id",
+    "reasoning"
+   ],
+   "type": "object"
+  },
+  "function_schema": {
+   "type": "function",
+   "function": {
+    "name": "get_ad_object_info",
+    "description": "Get one Active Directory object by ID with resolved navigation references.",
+    "parameters": {
+     "additionalProperties": false,
+     "properties": {
+      "ad_object_id": {
+       "description": "Active Directory object ID obtained from a graph object or another Active Directory lookup.",
+       "title": "Ad Object Id",
+       "type": "string"
+      },
+      "reasoning": {
+       "description": "Explanation of why this tool was called with the provided arguments.",
+       "maxLength": 4096,
+       "minLength": 1,
+       "title": "Reasoning",
+       "type": "string"
+      }
+     },
+     "required": [
+      "ad_object_id",
+      "reasoning"
+     ],
+     "type": "object"
+    },
+    "strict": true
+   }
+  }
+ },
+ {
+  "name": "get_entity",
+  "description": "Get one scenario entity by id with incoming and outgoing relation ids.",
+  "tags": [
+   "built_in"
+  ],
+  "arg_model": "GetEntityArgs",
+  "parameters": {
+   "additionalProperties": false,
+   "properties": {
+    "entity_id": {
+     "description": "Scenario entity id.",
+     "title": "Entity Id",
+     "type": "string"
+    },
+    "reasoning": {
+     "description": "Explanation of why this tool was called with the provided arguments.",
+     "maxLength": 4096,
+     "minLength": 1,
+     "title": "Reasoning",
+     "type": "string"
+    }
+   },
+   "required": [
+    "entity_id",
+    "reasoning"
+   ],
+   "type": "object"
+  },
+  "function_schema": {
+   "type": "function",
+   "function": {
+    "name": "get_entity",
+    "description": "Get one scenario entity by id with incoming and outgoing relation ids.",
+    "parameters": {
+     "additionalProperties": false,
+     "properties": {
+      "entity_id": {
+       "description": "Scenario entity id.",
+       "title": "Entity Id",
+       "type": "string"
+      },
+      "reasoning": {
+       "description": "Explanation of why this tool was called with the provided arguments.",
+       "maxLength": 4096,
+       "minLength": 1,
+       "title": "Reasoning",
+       "type": "string"
+      }
+     },
+     "required": [
+      "entity_id",
+      "reasoning"
+     ],
+     "type": "object"
+    },
+    "strict": true
+   }
+  }
+ },
+ {
+  "name": "get_relation",
+  "description": "Get one scenario relation by id, including its source and target entity ids.",
+  "tags": [
+   "built_in"
+  ],
+  "arg_model": "GetRelationArgs",
+  "parameters": {
+   "additionalProperties": false,
+   "properties": {
+    "relation_id": {
+     "description": "Scenario relation id.",
+     "title": "Relation Id",
+     "type": "string"
+    },
+    "reasoning": {
+     "description": "Explanation of why this tool was called with the provided arguments.",
+     "maxLength": 4096,
+     "minLength": 1,
+     "title": "Reasoning",
+     "type": "string"
+    }
+   },
+   "required": [
+    "relation_id",
+    "reasoning"
+   ],
+   "type": "object"
+  },
+  "function_schema": {
+   "type": "function",
+   "function": {
+    "name": "get_relation",
+    "description": "Get one scenario relation by id, including its source and target entity ids.",
+    "parameters": {
+     "additionalProperties": false,
+     "properties": {
+      "relation_id": {
+       "description": "Scenario relation id.",
+       "title": "Relation Id",
+       "type": "string"
+      },
+      "reasoning": {
+       "description": "Explanation of why this tool was called with the provided arguments.",
+       "maxLength": 4096,
+       "minLength": 1,
+       "title": "Reasoning",
+       "type": "string"
+      }
+     },
+     "required": [
+      "relation_id",
+      "reasoning"
+     ],
+     "type": "object"
+    },
+    "strict": true
+   }
+  }
+ },
+ {
+  "name": "search",
+  "description": "Search entities and relations whose id or non-type attributes contain the query substring.",
+  "tags": [
+   "built_in"
+  ],
+  "arg_model": "SearchArgs",
+  "parameters": {
+   "$defs": {
+    "EntitySearchScope": {
+     "additionalProperties": false,
+     "description": "Restrict search results to one entity type.",
+     "properties": {
+      "kind": {
+       "const": "entity",
+       "title": "Kind",
+       "type": "string"
+      },
+      "type": {
+       "$ref": "#/$defs/EntityType"
+      }
+     },
+     "required": [
+      "kind",
+      "type"
+     ],
+     "title": "EntitySearchScope",
+     "type": "object"
+    },
+    "EntityType": {
+     "description": "40 entity types \u2014 12 shared, 19 Windows-only, 8 Linux-only.",
+     "enum": [
+      "host",
+      "network_connection",
+      "thread",
+      "memory_region",
+      "email",
+      "email_url",
+      "email_click",
+      "email_attachment",
+      "archive_file",
+      "mounted_volume",
+      "vpn_session",
+      "app_object",
+      "windows_process",
+      "windows_file",
+      "windows_user",
+      "windows_service",
+      "windows_driver",
+      "registry_key",
+      "named_pipe",
+      "smb_share",
+      "scheduled_task",
+      "powershell_script",
+      "powershell_cmdlet_invocation",
+      "wmi_event_filter",
+      "wmi_event_consumer",
+      "wmi_binding",
+      "com_object",
+      "certificate_template",
+      "x509_certificate",
+      "kerberos_ticket",
+      "lnk_shortcut",
+      "ad_object",
+      "linux_process",
+      "linux_file",
+      "linux_user",
+      "linux_group",
+      "systemd_unit",
+      "kernel_module",
+      "unix_socket",
+      "ebpf_program"
+     ],
+     "title": "EntityType",
+     "type": "string"
+    },
+    "RelationSearchScope": {
+     "additionalProperties": false,
+     "description": "Restrict search results to one relation type.",
+     "properties": {
+      "kind": {
+       "const": "relation",
+       "title": "Kind",
+       "type": "string"
+      },
+      "type": {
+       "$ref": "#/$defs/RelationType"
+      }
+     },
+     "required": [
+      "kind",
+      "type"
+     ],
+     "title": "RelationSearchScope",
+     "type": "object"
+    },
+    "RelationType": {
+     "description": "~59 relation types \u2014 shared verbs + Windows-only + Linux-only primitives.",
+     "enum": [
+      "wrote_file",
+      "read_file",
+      "deleted_file",
+      "renamed_file",
+      "timestomped",
+      "executed_file",
+      "changed_file_mode",
+      "changed_file_owner",
+      "created_directory",
+      "created_link",
+      "truncated_file",
+      "resolved_file_handle",
+      "opened_by_handle",
+      "created_memfd",
+      "created_memfd_secret",
+      "connected_to",
+      "listened_on",
+      "accepted_connection_from",
+      "served_request_for",
+      "sent_data_to",
+      "received_data_from",
+      "loaded_image",
+      "allocated_memory",
+      "mapped_memory",
+      "created_thread",
+      "created_service",
+      "modified_service",
+      "started_service",
+      "stopped_service",
+      "logged_on_to",
+      "logged_off_from",
+      "runs_process",
+      "hosts",
+      "mounted",
+      "parent_of",
+      "win_process_create",
+      "injected_into",
+      "accessed_process",
+      "debugged_process",
+      "elevated_token",
+      "opened_handle",
+      "duplicated_handle",
+      "created_pipe",
+      "connected_to_pipe",
+      "opened_share_session",
+      "created_scheduled_task",
+      "ran_scheduled_task",
+      "payload_references",
+      "created_registry_key",
+      "set_registry_value",
+      "deleted_registry_key",
+      "deleted_registry_value",
+      "renamed_registry_key",
+      "created_wmi_filter",
+      "created_wmi_consumer",
+      "bound_wmi_filter_to_consumer",
+      "executed_script",
+      "invoked_cmdlet",
+      "loaded_driver",
+      "created_shadow_copy",
+      "received_email",
+      "contained_url",
+      "contained_attachment",
+      "materialized_as",
+      "performed_click",
+      "targeted_url",
+      "archived_to",
+      "extracted_to",
+      "contains_file",
+      "mounted_as",
+      "resolves_to",
+      "created_account",
+      "added_to_group",
+      "removed_from_group",
+      "requested_certificate",
+      "issued_by_template",
+      "authenticated_with_certificate",
+      "requested_service_ticket",
+      "dcsync_replication",
+      "opened_handle_on_ad_object",
+      "cleared_event_log",
+      "remote_wmi_exec",
+      "tunneled_via",
+      "established_vpn_session",
+      "tunneled_through",
+      "forked",
+      "execve_transitioned",
+      "linux_process_create",
+      "signal_sent",
+      "ptrace_attached",
+      "privilege_changed",
+      "capabilities_changed",
+      "controlled_tty",
+      "changed_system_time",
+      "changed_password",
+      "changed_selinux_context",
+      "changed_xattr",
+      "created_unix_socket",
+      "connected_to_unix_socket",
+      "passed_fd",
+      "loaded_kernel_module",
+      "loaded_ebpf",
+      "modified_audit_rules",
+      "modified_audit_params",
+      "created_group",
+      "modified_group"
+     ],
+     "title": "RelationType",
+     "type": "string"
+    },
+    "SearchTimeWindow": {
+     "additionalProperties": false,
+     "description": "Inclusive time window used to filter search results.",
+     "properties": {
+      "from": {
+       "description": "Inclusive ISO 8601 lower bound with timezone, or a UTC calendar day.",
+       "format": "date-time",
+       "title": "From",
+       "type": "string"
+      },
+      "to": {
+       "description": "Inclusive ISO 8601 upper bound with timezone, or a UTC calendar day.",
+       "format": "date-time",
+       "title": "To",
+       "type": "string"
+      }
+     },
+     "required": [
+      "from",
+      "to"
+     ],
+     "title": "SearchTimeWindow",
+     "type": "object"
+    }
+   },
+   "additionalProperties": false,
+   "properties": {
+    "query": {
+     "description": "Substring to match against ids and attributes. Minimum 5 symbols.",
+     "minLength": 5,
+     "title": "Query",
+     "type": "string"
+    },
+    "reasoning": {
+     "description": "Explanation of why this tool was called with the provided arguments.",
+     "maxLength": 4096,
+     "minLength": 1,
+     "title": "Reasoning",
+     "type": "string"
+    },
+    "page_id": {
+     "default": 1,
+     "description": "One-based result page identifier. Each page contains up to 10 objects.",
+     "minimum": 1,
+     "title": "Page Id",
+     "type": "integer"
+    },
+    "scope": {
+     "anyOf": [
+      {
+       "discriminator": {
+        "mapping": {
+         "entity": "#/$defs/EntitySearchScope",
+         "relation": "#/$defs/RelationSearchScope"
+        },
+        "propertyName": "kind"
+       },
+       "oneOf": [
+        {
+         "$ref": "#/$defs/EntitySearchScope"
+        },
+        {
+         "$ref": "#/$defs/RelationSearchScope"
+        }
+       ]
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Optional exact entity or relation type restriction.",
+     "title": "Scope"
+    },
+    "time_window": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/SearchTimeWindow"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "Optional inclusive time range with both `from` and `to`."
+    },
+    "sort_order": {
+     "default": "ascending",
+     "description": "Chronological result direction. Defaults to ascending by entity start time; descending uses an entity's latest time. Relations use their timestamp in either direction.",
+     "enum": [
+      "ascending",
+      "descending"
+     ],
+     "title": "Sort Order",
+     "type": "string"
+    }
+   },
+   "required": [
+    "query",
+    "reasoning"
+   ],
+   "type": "object"
+  },
+  "function_schema": {
+   "type": "function",
+   "function": {
+    "name": "search",
+    "description": "Search entities and relations whose id or non-type attributes contain the query substring.",
+    "parameters": {
+     "$defs": {
+      "EntitySearchScope": {
+       "additionalProperties": false,
+       "description": "Restrict search results to one entity type.",
+       "properties": {
+        "kind": {
+         "const": "entity",
+         "title": "Kind",
+         "type": "string"
+        },
+        "type": {
+         "$ref": "#/$defs/EntityType"
+        }
+       },
+       "required": [
+        "kind",
+        "type"
+       ],
+       "title": "EntitySearchScope",
+       "type": "object"
+      },
+      "EntityType": {
+       "description": "40 entity types \u2014 12 shared, 19 Windows-only, 8 Linux-only.",
+       "enum": [
+        "host",
+        "network_connection",
+        "thread",
+        "memory_region",
+        "email",
+        "email_url",
+        "email_click",
+        "email_attachment",
+        "archive_file",
+        "mounted_volume",
+        "vpn_session",
+        "app_object",
+        "windows_process",
+        "windows_file",
+        "windows_user",
+        "windows_service",
+        "windows_driver",
+        "registry_key",
+        "named_pipe",
+        "smb_share",
+        "scheduled_task",
+        "powershell_script",
+        "powershell_cmdlet_invocation",
+        "wmi_event_filter",
+        "wmi_event_consumer",
+        "wmi_binding",
+        "com_object",
+        "certificate_template",
+        "x509_certificate",
+        "kerberos_ticket",
+        "lnk_shortcut",
+        "ad_object",
+        "linux_process",
+        "linux_file",
+        "linux_user",
+        "linux_group",
+        "systemd_unit",
+        "kernel_module",
+        "unix_socket",
+        "ebpf_program"
+       ],
+       "title": "EntityType",
+       "type": "string"
+      },
+      "RelationSearchScope": {
+       "additionalProperties": false,
+       "description": "Restrict search results to one relation type.",
+       "properties": {
+        "kind": {
+         "const": "relation",
+         "title": "Kind",
+         "type": "string"
+        },
+        "type": {
+         "$ref": "#/$defs/RelationType"
+        }
+       },
+       "required": [
+        "kind",
+        "type"
+       ],
+       "title": "RelationSearchScope",
+       "type": "object"
+      },
+      "RelationType": {
+       "description": "~59 relation types \u2014 shared verbs + Windows-only + Linux-only primitives.",
+       "enum": [
+        "wrote_file",
+        "read_file",
+        "deleted_file",
+        "renamed_file",
+        "timestomped",
+        "executed_file",
+        "changed_file_mode",
+        "changed_file_owner",
+        "created_directory",
+        "created_link",
+        "truncated_file",
+        "resolved_file_handle",
+        "opened_by_handle",
+        "created_memfd",
+        "created_memfd_secret",
+        "connected_to",
+        "listened_on",
+        "accepted_connection_from",
+        "served_request_for",
+        "sent_data_to",
+        "received_data_from",
+        "loaded_image",
+        "allocated_memory",
+        "mapped_memory",
+        "created_thread",
+        "created_service",
+        "modified_service",
+        "started_service",
+        "stopped_service",
+        "logged_on_to",
+        "logged_off_from",
+        "runs_process",
+        "hosts",
+        "mounted",
+        "parent_of",
+        "win_process_create",
+        "injected_into",
+        "accessed_process",
+        "debugged_process",
+        "elevated_token",
+        "opened_handle",
+        "duplicated_handle",
+        "created_pipe",
+        "connected_to_pipe",
+        "opened_share_session",
+        "created_scheduled_task",
+        "ran_scheduled_task",
+        "payload_references",
+        "created_registry_key",
+        "set_registry_value",
+        "deleted_registry_key",
+        "deleted_registry_value",
+        "renamed_registry_key",
+        "created_wmi_filter",
+        "created_wmi_consumer",
+        "bound_wmi_filter_to_consumer",
+        "executed_script",
+        "invoked_cmdlet",
+        "loaded_driver",
+        "created_shadow_copy",
+        "received_email",
+        "contained_url",
+        "contained_attachment",
+        "materialized_as",
+        "performed_click",
+        "targeted_url",
+        "archived_to",
+        "extracted_to",
+        "contains_file",
+        "mounted_as",
+        "resolves_to",
+        "created_account",
+        "added_to_group",
+        "removed_from_group",
+        "requested_certificate",
+        "issued_by_template",
+        "authenticated_with_certificate",
+        "requested_service_ticket",
+        "dcsync_replication",
+        "opened_handle_on_ad_object",
+        "cleared_event_log",
+        "remote_wmi_exec",
+        "tunneled_via",
+        "established_vpn_session",
+        "tunneled_through",
+        "forked",
+        "execve_transitioned",
+        "linux_process_create",
+        "signal_sent",
+        "ptrace_attached",
+        "privilege_changed",
+        "capabilities_changed",
+        "controlled_tty",
+        "changed_system_time",
+        "changed_password",
+        "changed_selinux_context",
+        "changed_xattr",
+        "created_unix_socket",
+        "connected_to_unix_socket",
+        "passed_fd",
+        "loaded_kernel_module",
+        "loaded_ebpf",
+        "modified_audit_rules",
+        "modified_audit_params",
+        "created_group",
+        "modified_group"
+       ],
+       "title": "RelationType",
+       "type": "string"
+      },
+      "SearchTimeWindow": {
+       "additionalProperties": false,
+       "description": "Inclusive time window used to filter search results.",
+       "properties": {
+        "from": {
+         "description": "Inclusive ISO 8601 lower bound with timezone, or a UTC calendar day.",
+         "format": "date-time",
+         "title": "From",
+         "type": "string"
+        },
+        "to": {
+         "description": "Inclusive ISO 8601 upper bound with timezone, or a UTC calendar day.",
+         "format": "date-time",
+         "title": "To",
+         "type": "string"
+        }
+       },
+       "required": [
+        "from",
+        "to"
+       ],
+       "title": "SearchTimeWindow",
+       "type": "object"
+      }
+     },
+     "additionalProperties": false,
+     "properties": {
+      "query": {
+       "description": "Substring to match against ids and attributes. Minimum 5 symbols.",
+       "minLength": 5,
+       "title": "Query",
+       "type": "string"
+      },
+      "reasoning": {
+       "description": "Explanation of why this tool was called with the provided arguments.",
+       "maxLength": 4096,
+       "minLength": 1,
+       "title": "Reasoning",
+       "type": "string"
+      },
+      "page_id": {
+       "default": 1,
+       "description": "One-based result page identifier. Each page contains up to 10 objects.",
+       "minimum": 1,
+       "title": "Page Id",
+       "type": "integer"
+      },
+      "scope": {
+       "anyOf": [
+        {
+         "discriminator": {
+          "mapping": {
+           "entity": "#/$defs/EntitySearchScope",
+           "relation": "#/$defs/RelationSearchScope"
+          },
+          "propertyName": "kind"
+         },
+         "oneOf": [
+          {
+           "$ref": "#/$defs/EntitySearchScope"
+          },
+          {
+           "$ref": "#/$defs/RelationSearchScope"
+          }
+         ]
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Optional exact entity or relation type restriction.",
+       "title": "Scope"
+      },
+      "time_window": {
+       "anyOf": [
+        {
+         "$ref": "#/$defs/SearchTimeWindow"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Optional inclusive time range with both `from` and `to`."
+      },
+      "sort_order": {
+       "default": "ascending",
+       "description": "Chronological result direction. Defaults to ascending by entity start time; descending uses an entity's latest time. Relations use their timestamp in either direction.",
+       "enum": [
+        "ascending",
+        "descending"
+       ],
+       "title": "Sort Order",
+       "type": "string"
+      }
+     },
+     "required": [
+      "query",
+      "reasoning"
+     ],
+     "type": "object"
+    },
+    "strict": true
+   }
+  }
+ }
+]

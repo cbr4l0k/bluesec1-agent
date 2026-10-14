@@ -1,14 +1,18 @@
 import argparse
 import asyncio
+import contextlib
 import json
 import sys
 
 import truststore
 from pydantic import ValidationError
+from typesafe_sdk import AsyncTypeSafeClient
 
 from bluesec1_agent.agent import SimpleSGRAgent
+from bluesec1_agent.codex_llm import CodexStructuredStepClient
 from bluesec1_agent.llm import OpenAIStructuredStepClient
 from bluesec1_agent.settings import Settings
+from bluesec1_agent.triage import TriageDecisionTree
 from bluesec1_client import (
     CompetitionClosedError,
     RemoteAuthenticationError,
@@ -50,13 +54,21 @@ async def run(args: argparse.Namespace) -> None:
     """
     truststore.inject_into_ssl()
     settings = _load_settings()
-    llm = OpenAIStructuredStepClient(
-        base_url=settings.llm_base_url,
-        api_key=settings.llm_api_key.get_secret_value(),
-        model=settings.llm_default_model,
-        timeout_seconds=settings.llm_timeout_seconds,
-        max_completion_tokens=settings.llm_max_completion_tokens,
-        max_retries=settings.llm_max_step_retries,
+    llm = _build_llm(settings)
+    model_name = (
+        f"codex:{settings.llm_default_model or 'default'}"
+        if settings.llm_backend == "codex"
+        else settings.llm_default_model
+    )
+    typesafe = (
+        AsyncTypeSafeClient(api_key=settings.typesafe_api_key.get_secret_value())
+        if settings.typesafe_api_key is not None
+        else None
+    )
+    triage = (
+        TriageDecisionTree(typesafe, model=settings.typesafe_model)
+        if typesafe is not None
+        else None
     )
     agent_name = args.agent_name or settings.agent_name
     verify_tls = (
@@ -64,24 +76,27 @@ async def run(args: argparse.Namespace) -> None:
     )
     async with (
         llm,
+        typesafe or contextlib.nullcontext(),
         RemoteBenchmarkClient(
             endpoint=args.endpoint or settings.scenario_runtime_endpoint,
             token=args.token or settings.scenario_runtime_token.get_secret_value(),
             verify_tls=verify_tls,
             run_label=args.run_label or settings.remote_run_label,
             agent_name=agent_name,
-            model_name=settings.llm_default_model,
+            model_name=model_name,
             arena=args.arena or settings.scenario_runtime_arena,
             metadata={
                 "agent": agent_name,
                 "implementation": "structured-generation-scenario-runtime-grpc",
-                "model": settings.llm_default_model,
+                "model": model_name,
             },
         ) as client,
     ):
         result = await SimpleSGRAgent(
             llm,
             max_steps=settings.agent_max_steps,
+            triage=triage,
+            max_assessments=settings.agent_max_assessments,
         ).run(client)
 
     print(json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True))
@@ -122,6 +137,33 @@ def main() -> None:
         raise SystemExit(1) from error
 
 
+def _build_llm(settings: Settings) -> OpenAIStructuredStepClient | CodexStructuredStepClient:
+    """Create the step generator selected by `LLM_BACKEND`.
+
+    Args:
+        settings: Validated settings.
+
+    Returns:
+        Structured step client for the agent loop.
+    """
+    if settings.llm_backend == "codex":
+        return CodexStructuredStepClient(
+            model=settings.llm_default_model,
+            reasoning_effort=settings.codex_reasoning_effort,
+            timeout_seconds=settings.llm_timeout_seconds,
+            max_retries=settings.llm_max_step_retries,
+        )
+    assert settings.llm_base_url and settings.llm_api_key and settings.llm_default_model
+    return OpenAIStructuredStepClient(
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key.get_secret_value(),
+        model=settings.llm_default_model,
+        timeout_seconds=settings.llm_timeout_seconds,
+        max_completion_tokens=settings.llm_max_completion_tokens,
+        max_retries=settings.llm_max_step_retries,
+    )
+
+
 def _load_settings() -> Settings:
     """Load settings and explain what is missing instead of raising a raw error.
 
@@ -132,9 +174,14 @@ def _load_settings() -> Settings:
         return Settings()
     except ValidationError as error:
         missing = [str(item["loc"][0]) for item in error.errors() if item["type"] == "missing"]
-        if not missing:
+        invalid = [item["msg"] for item in error.errors() if item["type"] == "value_error"]
+        if not missing and not invalid:
             raise
-        print("Missing configuration: " + ", ".join(missing), file=sys.stderr)
+        if missing:
+            print("Missing configuration: " + ", ".join(missing), file=sys.stderr)
+        for message in invalid:
+            reason = message.removeprefix("Value error, ")
+            print(f"Invalid configuration: {reason}", file=sys.stderr)
         print(
             "Copy .env.example to .env and fill it in. "
             "Runtime address and key: https://bluesec.team/",

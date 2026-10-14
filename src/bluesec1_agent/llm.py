@@ -10,11 +10,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from openai.types.shared_params import ResponseFormatJSONSchema
 from pydantic import ValidationError
 
-from bluesec1_agent.models import (
-    NEXT_STEP_RESPONSE_FORMAT,
-    FinishInvestigationRequest,
-    NextStep,
-)
+from bluesec1_agent.models import ASSESS_TOOL, FINISH_TOOL, NextStep
 
 STRUCTURED_OUTPUT_INSTRUCTION = """
 Every assistant reply must be exactly one JSON object with these top-level fields:
@@ -22,17 +18,21 @@ Every assistant reply must be exactly one JSON object with these top-level field
   "current_state": "short evidence-focused string",
   "plan_remaining_steps_brief": ["one to five short step strings"],
   "task_completed": false,
-  "function": {
-    "tool": "one advertised tool name",
-    "...": "that tool's arguments placed directly in this function object"
-  }
+  "functions": [
+    {
+      "tool": "one advertised tool name",
+      "...": "that tool's arguments placed directly in this call object"
+    }
+  ]
 }
 
 Never use top-level `action`, `parameters`, `tool_name`, or `arguments` fields.
 Never wrap tool arguments in a nested `parameters` or `arguments` object.
 For example, a call with one advertised argument is:
 {"tool":"advertised_tool","argument_name":"value"}
-Set task_completed=true only for a function whose tool is finish_investigation.
+`functions` holds one to four independent calls, executed in order.
+finish_investigation and assess_situation must be the only call in `functions`.
+Set task_completed=true exactly when `functions` is a single finish_investigation call.
 Return no prose, markdown, XML, comments, or keys outside the required object.
 """.strip()
 
@@ -48,7 +48,9 @@ class NextStepRequestError(RuntimeError):
 class StructuredStepClient(Protocol):
     """Narrow async contract consumed by the investigation loop."""
 
-    async def next_step(self, messages: list[dict[str, Any]]) -> NextStep:
+    async def next_step(
+        self, messages: list[dict[str, Any]], response_format: dict[str, Any]
+    ) -> NextStep:
         """Generate and validate one investigation step."""
         ...
 
@@ -107,11 +109,14 @@ class OpenAIStructuredStepClient:
         if self._owns_client:
             await self._client.close()
 
-    async def next_step(self, messages: list[dict[str, Any]]) -> NextStep:
+    async def next_step(
+        self, messages: list[dict[str, Any]], response_format: dict[str, Any]
+    ) -> NextStep:
         """Return one valid `NextStep`, repairing malformed replies when possible.
 
         Args:
             messages: Current investigation conversation.
+            response_format: Strict `NextStep` schema built from the task's tool catalog.
 
         Returns:
             A locally validated structured investigation step.
@@ -138,7 +143,7 @@ class OpenAIStructuredStepClient:
             response = await self._client.chat.completions.create(
                 model=self.model,
                 messages=cast(list[ChatCompletionMessageParam], request_messages),
-                response_format=cast(ResponseFormatJSONSchema, NEXT_STEP_RESPONSE_FORMAT),
+                response_format=cast(ResponseFormatJSONSchema, response_format),
                 max_completion_tokens=self.max_completion_tokens,
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
@@ -167,7 +172,7 @@ class OpenAIStructuredStepClient:
 
             logger.info(
                 "LLM selected {} in {} ms using {} tokens.",
-                step.function.tool,
+                ", ".join(call.tool for call in step.functions),
                 latency_ms,
                 total_tokens,
             )
@@ -270,7 +275,10 @@ def parse_next_step_payload(raw_content: str) -> NextStep:
     except ValidationError as exc:
         raise ValueError("Model returned invalid NextStep JSON.") from exc
 
-    is_finish = isinstance(step.function, FinishInvestigationRequest)
+    tools = [call.tool for call in step.functions]
+    if len(tools) > 1 and (FINISH_TOOL in tools or ASSESS_TOOL in tools):
+        raise ValueError(f"{FINISH_TOOL} and {ASSESS_TOOL} must be the only call in a step.")
+    is_finish = tools == [FINISH_TOOL]
     if step.task_completed != is_finish:
         raise ValueError(
             "task_completed must be true exactly when finish_investigation is selected."
@@ -299,6 +307,6 @@ def render_json(value: Any) -> str:
         value: Public JSON-compatible value.
 
     Returns:
-        Stable readable JSON text.
+        Stable compact JSON text.
     """
-    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)

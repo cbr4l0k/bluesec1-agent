@@ -1,0 +1,88 @@
+{
+ "alert_description": "Process C:\\Windows\\System32\\svchost.exe (PID: 5452) was started on host WS30 (IP: 172.16.0.220)",
+ "trigger_entities": [
+  {
+   "id": "412945fa-8255-509d-a789-5c08f8f9fec5",
+   "type": "host",
+   "properties": {
+    "hostname": "WS30",
+    "ad_object_id": "9eceab2e-c7d8-5afb-8478-8d3a8ac83812",
+    "platform": "windows",
+    "os": "Windows 10",
+    "os_version": "10.0.19045",
+    "ip": "172.16.0.220",
+    "ip_addresses": null,
+    "mac_addresses": null,
+    "architecture": null,
+    "domain": "CANYON",
+    "role": "workstation",
+    "is_virtual_machine": null,
+    "boot_time": null
+   },
+   "host_id": null,
+   "timestamps": [
+    "2026-06-14T23:03:07+00:00",
+    "2026-06-15T02:40:11+00:00"
+   ]
+  },
+  {
+   "id": "b043f4a9-ebc5-59db-b050-647e406a8d5e",
+   "type": "windows_process",
+   "properties": {
+    "pid": 5452,
+    "parent_pid": null,
+    "parent_image": null,
+    "image_path": "C:\\Windows\\System32\\svchost.exe",
+    "cmdline": "C:\\Windows\\System32\\svchost.exe -k netsvcs -p -s iphlpsvc",
+    "cwd": "C:\\Windows\\System32",
+    "powershell_host": null,
+    "powershell_version": null,
+    "user_sid": "S-1-5-18",
+    "user": "NT AUTHORITY\\SYSTEM",
+    "integrity_level": "system",
+    "session_id": 0,
+    "logon_id": "0x3e7",
+    "is_elevated": null,
+    "sha256": "ADD683A6910ABBBF0E28B557FAD0BA998166394932AE2ACA069D9AA19EA8FE88",
+    "sha1": "1BC5066DDF693FC034D6514618854E26A84FD0D1",
+    "md5": "B7F884C1B74A263F746EE12A5F7C9F6A",
+    "original_filename": "svchost.exe",
+    "digital_signature": null,
+    "signed": true,
+    "signer": "Microsoft Windows",
+    "company": "Microsoft Corporation",
+    "product": "Microsoft\u00ae Windows\u00ae Operating System",
+    "file_description": "Host Process for Windows Services",
+    "file_version": "10.0.19041.1806 (WinBuild.160101.0800)",
+    "token_privileges": null,
+    "start_time": null,
+    "end_time": null,
+    "loaded_modules": null
+   },
+   "host_id": "412945fa-8255-509d-a789-5c08f8f9fec5",
+   "timestamps": [
+    "2026-06-18T21:20:47+00:00",
+    "2026-06-18T21:20:48+00:00",
+    "2026-06-18T21:28:42+00:00",
+    "2026-06-18T21:28:43+00:00",
+    "2026-06-18T23:10:44+00:00",
+    "2026-06-18T23:10:45+00:00"
+   ]
+  }
+ ],
+ "trigger_relations": [
+  {
+   "id": "ff023ed6-8e00-59a7-ad73-a021bd21ce0a",
+   "type": "hosts",
+   "source_id": "412945fa-8255-509d-a789-5c08f8f9fec5",
+   "target_id": "b043f4a9-ebc5-59db-b050-647e406a8d5e",
+   "timestamp": null,
+   "log_sources": [
+    "ground_truth_only"
+   ],
+   "properties": null,
+   "logon_properties": null,
+   "access_properties": null
+  }
+ ]
+}
